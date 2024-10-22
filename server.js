@@ -1,59 +1,60 @@
-const express = require('express');
-const puppeteer = require('puppeteer');
-const fs = require('fs');
+import express from 'express';
+import puppeteer from 'puppeteer';
+import bodyParser from 'body-parser';
+import fs from 'fs/promises';
+import { randomUUID } from 'crypto';
 
 const app = express();
-const port = 3000;
+const PORT = 3000;
 
-app.use(express.json());
+// Middleware to parse JSON data
+app.use(bodyParser.json());
 
-// Serve index.html file
-app.get('/', (req, res) => {
-  fs.readFile('./index.html', (err, html) => {
-    if (err) {
-      res.status(500).send('Error loading index.html');
-      return;
-    }
-    res.header('Content-Type', 'text/html');
-    res.send(html);
-  });
-});
-
-let browserInstance; // Keep track of the browser instance
-
+// API endpoint to generate PDF from HTML content
 app.post('/generate-pdf', async (req, res) => {
-  try {
-    const { htmlContent, options } = req.body;
+    const { htmlContent } = req.body;
 
-    // Launch Puppeteer browser if not already launched
-    if (!browserInstance) {
-      browserInstance = await puppeteer.launch({
-        product: 'firefox',
-        protocol: 'webDriverBiDi'
-      });
+    if (!htmlContent) {
+        return res.status(400).json({ error: 'htmlContent is required' });
     }
 
-    const page = await browserInstance.newPage();
+    const browser = await puppeteer.launch({
+        browser: 'firefox',
+    });
+    const page = await browser.newPage();
 
-    // Set HTML content
-    await page.setContent(htmlContent);
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
 
-    // Generate PDF as buffer
-    const pdfBuffer = await page.pdf(options);
+    // Generate a random PDF filename
+    const pdfFilename = `output-${randomUUID()}.pdf`;
+    await page.pdf({
+        path: pdfFilename,
+        printBackground: true,
+    });
 
-    // Encode PDF buffer as base64 data URI
-    const pdfBase64 = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
+    await browser.close();
 
-    // Close the page after PDF generation
-    await page.close();
+    // Read the PDF file and convert to Base64
+    try {
+        const pdfBuffer = await fs.readFile(pdfFilename);
+        const base64PDF = pdfBuffer.toString('base64');
 
-    // Send the PDF as a base64 data URI in the response
-    res.send({ pdfBase64 });
-  } catch (error) {
-    res.status(500).send({ error: 'Internal Server Error' });
-  }
+        // Send the Base64 string and filename back as JSON
+        res.json({
+            message: 'PDF generated successfully!',
+            filename: pdfFilename,
+            base64PDF: base64PDF,
+        });
+        
+        // Delete the PDF file after sending the response
+        await fs.unlink(pdfFilename);
+    } catch (error) {
+        console.error('Error reading PDF file:', error);
+        res.status(500).json({ error: 'Error generating PDF' });
+    }
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
 });

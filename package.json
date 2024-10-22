@@ -1,6 +1,14 @@
 {
+  "name": "your-project-name",
+  "version": "1.0.0",
+  "type": "module",
   "dependencies": {
-    "express": "^4.19.2",
-    "puppeteer": "^22.7.1"
+    "express": "^5.0.1",
+    "puppeteer": "^23.6.0",
+    "body-parser": "^1.20.3" 
+  },
+  "scripts": {
+    "install:firefox": "npx puppeteer browsers install firefox",
+    "start": "node generate-pdf.js"
   }
 }
